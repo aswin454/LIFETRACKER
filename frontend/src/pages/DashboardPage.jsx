@@ -81,7 +81,7 @@ export default function DashboardPage() {
     setError('');
     try {
       // Fetch tasks for active category
-      const tasksRes = await fetch(`/api/tasks?category=${activeCategory}`, {
+      const tasksRes = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks?category=${activeCategory}`, {
         headers: getAuthHeaders(),
       });
       if (!tasksRes.ok) throw new Error('Failed to fetch tasks');
@@ -89,7 +89,7 @@ export default function DashboardPage() {
       setTasks(tasksData);
 
       // Fetch summary stats
-      const statsRes = await fetch('/api/tasks/stats', {
+      const statsRes = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/stats`, {
         headers: getAuthHeaders(),
       });
       if (!statsRes.ok) throw new Error('Failed to fetch statistics');
@@ -240,7 +240,7 @@ export default function DashboardPage() {
     const nextCount = isNowCompleted ? target : 0;
 
     try {
-      const response = await fetch(`/api/tasks/${task._id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ completed: isNowCompleted }),
@@ -321,7 +321,7 @@ export default function DashboardPage() {
     const nextCompleted = boundedCount >= target;
 
     try {
-      const response = await fetch(`/api/tasks/${task._id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${task._id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ completedCount: boundedCount }),
@@ -385,7 +385,7 @@ export default function DashboardPage() {
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     try {
-      const response = await fetch(`/api/tasks/${taskId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${taskId}`, {
         method: 'DELETE',
         headers: getAuthHeaders(),
       });
@@ -427,7 +427,7 @@ export default function DashboardPage() {
 
     try {
       if (modalMode === 'add') {
-        const response = await fetch('/api/tasks', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks`, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({
@@ -440,7 +440,7 @@ export default function DashboardPage() {
 
         if (!response.ok) throw new Error('Failed to create task');
       } else {
-        const response = await fetch(`/api/tasks/${editingTaskId}`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${editingTaskId}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
           body: JSON.stringify({

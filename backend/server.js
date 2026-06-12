@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
 import User from './models/User.js';
+import { startDailyTaskScheduler, checkAndResetOnStartup } from './utils/scheduler.js';
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.get('/api/health', (req, res) => {
 // Start the server immediately
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
+  startDailyTaskScheduler();
 });
 
 // Connect to MongoDB asynchronously in the background
@@ -49,6 +51,7 @@ mongoose
     try {
       await User.syncIndexes();
       console.log('Database indexes synchronized successfully');
+      await checkAndResetOnStartup();
     } catch (indexError) {
       console.error('Error synchronizing database indexes:', indexError.message);
     }

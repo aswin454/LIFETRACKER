@@ -40,56 +40,86 @@ const checkAndDecayStreak = async (user, isDb) => {
   }
 };
 
-// Helper to increment/update streak when a daily task is completed
-const handleStreakIncrement = async (user, isDb) => {
-  let newStreak = (user.streak || 0) + 1;
-  let newHighest = Math.max(user.highestStreak || 0, newStreak);
-  let newLastUpdate = new Date();
+// Helper to update streak based on completed day full tasks (all daily tasks completed)
+const updateUserStreak = async (user, isDb) => {
+  const userId = user._id;
 
+  // 1. Get all daily tasks for the user
+  let dailyTasks = [];
   if (isDb) {
-    await User.findByIdAndUpdate(user._id, {
-      $set: {
-        streak: newStreak,
-        highestStreak: newHighest,
-        lastStreakUpdate: newLastUpdate
-      }
-    });
+    dailyTasks = await Task.find({ user: userId, category: 'daily' });
   } else {
-    const mockU = mockUsers.find(u => u._id === user._id);
-    if (mockU) {
-      mockU.streak = newStreak;
-      mockU.highestStreak = newHighest;
-      mockU.lastStreakUpdate = newLastUpdate;
-    }
+    dailyTasks = mockTasks.filter(t => t.user.toString() === userId.toString() && t.category === 'daily');
   }
 
-  user.streak = newStreak;
-  user.highestStreak = newHighest;
-  user.lastStreakUpdate = newLastUpdate;
-};
+  const hasDailyTasks = dailyTasks.length > 0;
+  const allCompleted = hasDailyTasks && dailyTasks.every(t => t.completed);
 
-// Helper to decrement streak when a daily task is uncompleted
-const handleStreakDecrement = async (user, isDb) => {
-  let newStreak = Math.max(0, (user.streak || 0) - 1);
-  let newLastUpdate = new Date();
+  const isToday = (date) => {
+    if (!date) return false;
+    const d = new Date(date);
+    const today = new Date();
+    return d.toDateString() === today.toDateString();
+  };
 
-  if (isDb) {
-    await User.findByIdAndUpdate(user._id, {
-      $set: {
-        streak: newStreak,
-        lastStreakUpdate: newLastUpdate
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (allCompleted) {
+    // If all daily tasks are completed, and we haven't already incremented the streak today:
+    if (!isToday(user.lastStreakUpdate)) {
+      let newStreak = (user.streak || 0) + 1;
+      let newHighest = Math.max(user.highestStreak || 0, newStreak);
+      let newLastUpdate = new Date();
+
+      if (isDb) {
+        await User.findByIdAndUpdate(userId, {
+          $set: {
+            streak: newStreak,
+            highestStreak: newHighest,
+            lastStreakUpdate: newLastUpdate
+          }
+        });
+      } else {
+        const mockU = mockUsers.find(u => u._id === userId.toString());
+        if (mockU) {
+          mockU.streak = newStreak;
+          mockU.highestStreak = newHighest;
+          mockU.lastStreakUpdate = newLastUpdate;
+        }
       }
-    });
+
+      user.streak = newStreak;
+      user.highestStreak = newHighest;
+      user.lastStreakUpdate = newLastUpdate;
+    }
   } else {
-    const mockU = mockUsers.find(u => u._id === user._id);
-    if (mockU) {
-      mockU.streak = newStreak;
-      mockU.lastStreakUpdate = newLastUpdate;
+    // If not all daily tasks are completed, but we had incremented the streak today:
+    // We must revert/decrement the streak.
+    if (isToday(user.lastStreakUpdate)) {
+      let newStreak = Math.max(0, (user.streak || 0) - 1);
+      let newLastUpdate = yesterday; // Set last streak update to yesterday to protect the rest of the streak from decay
+
+      if (isDb) {
+        await User.findByIdAndUpdate(userId, {
+          $set: {
+            streak: newStreak,
+            lastStreakUpdate: newLastUpdate
+          }
+        });
+      } else {
+        const mockU = mockUsers.find(u => u._id === userId.toString());
+        if (mockU) {
+          mockU.streak = newStreak;
+          mockU.lastStreakUpdate = newLastUpdate;
+        }
+      }
+
+      user.streak = newStreak;
+      user.lastStreakUpdate = newLastUpdate;
     }
   }
-
-  user.streak = newStreak;
-  user.lastStreakUpdate = newLastUpdate;
 };
 
 // Apply protect middleware to all task routes
@@ -405,6 +435,17 @@ router.post('/', async (req, res) => {
       };
 
       mockTasks.push(newTask);
+
+      if (category === 'daily') {
+        const mockU = mockUsers.find(u => u._id === req.user._id.toString());
+        if (mockU) {
+          await updateUserStreak(mockU, false);
+          req.user.streak = mockU.streak;
+          req.user.highestStreak = mockU.highestStreak;
+          req.user.lastStreakUpdate = mockU.lastStreakUpdate;
+        }
+      }
+
       return res.status(201).json(newTask);
     }
 
@@ -417,6 +458,16 @@ router.post('/', async (req, res) => {
       completedCount: 0,
       user: req.user._id,
     });
+
+    if (category === 'daily') {
+      const userDoc = await User.findById(req.user._id);
+      if (userDoc) {
+        await updateUserStreak(userDoc, true);
+        req.user.streak = userDoc.streak;
+        req.user.highestStreak = userDoc.highestStreak;
+        req.user.lastStreakUpdate = userDoc.lastStreakUpdate;
+      }
+    }
 
     res.status(201).json(task);
   } catch (error) {
@@ -444,6 +495,8 @@ router.put('/:id', async (req, res) => {
 
       if (title !== undefined) task.title = title;
       if (description !== undefined) task.description = description;
+      
+      const oldCategory = task.category;
       if (category !== undefined) {
         if (!['daily', 'weekly', 'monthly'].includes(category)) {
           return res.status(400).json({ message: 'Invalid category' });
@@ -458,24 +511,11 @@ router.put('/:id', async (req, res) => {
       }
 
       if (completed !== undefined) {
-        const nextCompleted = completed;
-        if (nextCompleted && !task.completed && task.category === 'daily') {
-          await handleStreakIncrement(req.user, false);
-        } else if (!nextCompleted && task.completed && task.category === 'daily') {
-          await handleStreakDecrement(req.user, false);
-        }
-        task.completed = nextCompleted;
-        task.completedCount = nextCompleted ? nextTarget : 0;
+        task.completed = completed;
+        task.completedCount = completed ? nextTarget : 0;
       } else if (completedCount !== undefined) {
-        const nextCount = Math.max(0, Math.min(nextTarget, Number(completedCount)));
-        const nextCompleted = nextCount >= nextTarget;
-        if (nextCompleted && !task.completed && task.category === 'daily') {
-          await handleStreakIncrement(req.user, false);
-        } else if (!nextCompleted && task.completed && task.category === 'daily') {
-          await handleStreakDecrement(req.user, false);
-        }
-        task.completedCount = nextCount;
-        task.completed = nextCompleted;
+        task.completedCount = Math.max(0, Math.min(nextTarget, Number(completedCount)));
+        task.completed = task.completedCount >= nextTarget;
       } else {
         const currentCount = task.completedCount || 0;
         task.completedCount = Math.max(0, Math.min(nextTarget, currentCount));
@@ -483,6 +523,18 @@ router.put('/:id', async (req, res) => {
       }
 
       mockTasks[taskIndex] = task;
+
+      // Update daily streak if this task was or now is a daily task
+      if (oldCategory === 'daily' || task.category === 'daily') {
+        const mockU = mockUsers.find(u => u._id === req.user._id.toString());
+        if (mockU) {
+          await updateUserStreak(mockU, false);
+          req.user.streak = mockU.streak;
+          req.user.highestStreak = mockU.highestStreak;
+          req.user.lastStreakUpdate = mockU.lastStreakUpdate;
+        }
+      }
+
       return res.json(task);
     }
 
@@ -517,20 +569,7 @@ router.put('/:id', async (req, res) => {
       nextCompleted = nextCount >= nextTarget;
     }
 
-    // Check if daily task completed status flips to update streak
-    if (nextCompleted !== task.completed && task.category === 'daily') {
-      const userDoc = await User.findById(req.user._id);
-      if (userDoc) {
-        if (nextCompleted === true) {
-          await handleStreakIncrement(userDoc, true);
-        } else {
-          await handleStreakDecrement(userDoc, true);
-        }
-        req.user.streak = userDoc.streak;
-        req.user.highestStreak = userDoc.highestStreak;
-        req.user.lastStreakUpdate = userDoc.lastStreakUpdate;
-      }
-    }
+    const oldCategory = task.category;
 
     // Prepare updates
     const updates = {};
@@ -551,6 +590,17 @@ router.put('/:id', async (req, res) => {
       { $set: updates },
       { new: true, runValidators: true }
     );
+
+    // Update daily streak if this task was or now is a daily task
+    if (oldCategory === 'daily' || task.category === 'daily') {
+      const userDoc = await User.findById(req.user._id);
+      if (userDoc) {
+        await updateUserStreak(userDoc, true);
+        req.user.streak = userDoc.streak;
+        req.user.highestStreak = userDoc.highestStreak;
+        req.user.lastStreakUpdate = userDoc.lastStreakUpdate;
+      }
+    }
 
     res.json(task);
   } catch (error) {
@@ -577,7 +627,19 @@ router.delete('/:id', async (req, res) => {
         return res.status(401).json({ message: 'Not authorized to delete this task' });
       }
 
+      const wasDaily = task.category === 'daily';
       mockTasks.splice(taskIndex, 1);
+
+      if (wasDaily) {
+        const mockU = mockUsers.find(u => u._id === req.user._id.toString());
+        if (mockU) {
+          await updateUserStreak(mockU, false);
+          req.user.streak = mockU.streak;
+          req.user.highestStreak = mockU.highestStreak;
+          req.user.lastStreakUpdate = mockU.lastStreakUpdate;
+        }
+      }
+
       return res.json({ message: 'Task removed successfully', id: req.params.id });
     }
 
@@ -593,7 +655,18 @@ router.delete('/:id', async (req, res) => {
       return res.status(401).json({ message: 'Not authorized to delete this task' });
     }
 
+    const wasDaily = task.category === 'daily';
     await Task.findByIdAndDelete(req.params.id);
+
+    if (wasDaily) {
+      const userDoc = await User.findById(req.user._id);
+      if (userDoc) {
+        await updateUserStreak(userDoc, true);
+        req.user.streak = userDoc.streak;
+        req.user.highestStreak = userDoc.highestStreak;
+        req.user.lastStreakUpdate = userDoc.lastStreakUpdate;
+      }
+    }
 
     res.json({ message: 'Task removed successfully', id: req.params.id });
   } catch (error) {
