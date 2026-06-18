@@ -851,6 +851,57 @@ export default function DashboardPage() {
 
               </div>
 
+              {/* Category Completion Rates Progress Bars */}
+              <div className={`rounded-3xl p-6 border ${theme.card} grid grid-cols-1 md:grid-cols-3 gap-6`}>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Daily Completion</span>
+                    <span className="text-sm font-black text-indigo-500">{stats.categories?.daily?.percentage || 0}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${stats.categories?.daily?.percentage || 0}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                    {stats.categories?.daily?.completed || 0} of {stats.categories?.daily?.total || 0} daily tasks done
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Weekly Completion</span>
+                    <span className="text-sm font-black text-emerald-500">{stats.categories?.weekly?.percentage || 0}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${stats.categories?.weekly?.percentage || 0}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                    {stats.categories?.weekly?.completed || 0} of {stats.categories?.weekly?.total || 0} weekly tasks done
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Monthly Completion</span>
+                    <span className="text-sm font-black text-amber-500">{stats.categories?.monthly?.percentage || 0}%</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-slate-900 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${stats.categories?.monthly?.percentage || 0}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 font-medium">
+                    {stats.categories?.monthly?.completed || 0} of {stats.categories?.monthly?.total || 0} monthly tasks done
+                  </p>
+                </div>
+              </div>
+
               {/* Grid block for Analytics & Insights */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
@@ -989,17 +1040,34 @@ export default function DashboardPage() {
                         Consistency Peak
                       </h4>
                       <p className="text-xs text-slate-400 mt-1 leading-relaxed px-4">
-                        You are more productive in the mornings. Maintain the momentum for 3 more days to hit a new record.
+                        {(() => {
+                          const streak = stats.streak || 0;
+                          const highest = stats.highestStreak || 0;
+                          if (streak === 0) {
+                            return `Start your productivity spark! Complete all daily tasks today to build a streak (Best: ${highest} ${highest === 1 ? 'day' : 'days'}).`;
+                          } else if (streak <= 2) {
+                            return `Good start! Keep finishing your daily schedule to heat up your ${streak}-day streak (Best: ${highest} ${highest === 1 ? 'day' : 'days'}).`;
+                          } else if (streak <= 5) {
+                            return `You're on fire! A solid ${streak}-day active streak. Maintain the focus to hit a new record!`;
+                          } else {
+                            return `Phenomenal consistency! Elite ${streak}-day streak active. You are unstoppable!`;
+                          }
+                        })()}
                       </p>
                     </div>
 
                     {/* Small visual streak flame widget */}
-                    <div className={`inline-flex items-center gap-2.5 py-2 px-3 rounded-xl border ${stats.streak > 0
-                        ? 'bg-orange-500/10 border-orange-500/20 text-orange-500'
-                        : 'bg-slate-200/50 dark:bg-slate-900 border-transparent text-slate-400'
-                      }`}>
-                      <Flame className={`w-4 h-4 ${stats.streak > 0 ? 'fill-orange-500 animate-flame' : ''}`} />
-                      <span className="text-xs font-bold">{stats.streak || 0} Day Streak Active</span>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className={`inline-flex items-center gap-2.5 py-2 px-3.5 rounded-xl border ${stats.streak > 0
+                          ? 'bg-orange-500/10 border-orange-500/20 text-orange-500'
+                          : 'bg-slate-200/50 dark:bg-slate-900 border-transparent text-slate-400'
+                        }`}>
+                        <Flame className={`w-4 h-4 ${stats.streak > 0 ? 'fill-orange-500 animate-flame' : ''}`} />
+                        <span className="text-xs font-bold">{stats.streak || 0} Day Streak Active</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-extrabold uppercase tracking-wider">
+                        Highest Streak: {stats.highestStreak || 0} {stats.highestStreak === 1 ? 'Day' : 'Days'}
+                      </span>
                     </div>
                   </div>
 
